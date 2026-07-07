@@ -1,0 +1,30 @@
+name: focus_orbit
+description: "Focus Orbit - sensor-driven focus app (Phase 1: UI + verified deps)."
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.0  # T13確定: test/drift_dev/amplify三すくみの解はDart 3.10床(pub getログで証明)
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # ---- 状態管理・ドメイン(Phase 0/UIが使用中) ----
+  flutter_riverpod: ^3.3.1   # AD-1 | pub.dev一次確認 2026-07-06 (latest 3.3.1, 2026-03-09公開)
+  freezed_annotation: ^3.1.0 # AD-2 | pub.dev一次確認 2026-07-06 (latest 3.1.0) → 旧UNVERIFIED-3解消
+  # ---- Phase 1 data層実装が使用 (AD-3/4/5) ----
+  drift: 2.31.0             # AD-3 | Dart 3.9.2互換の上限系列。2.32+はsqlite3 ^3.x要求でdrift_flutter 0.2系と非互換、2.33+はSDK>=3.10要求(実測ログ)
+  drift_flutter: 0.2.8      # AD-3 | sqlite3 ^2.x系。drift 2.31系と同一sqlite3宇宙で共存
+  sqlite3: 2.9.4           # AD-3/P2-T1 | SqliteException型判定(UNIQUE違反→AlreadyApplied)。driftの推移依存と同一2.x系のためpub解決は既存制約内
+  sensors_plus: ^7.0.0       # AD-4 | pub.dev一次確認 (latest 7.0.0)
+  # amplify_flutter: ^2.11.0   # AD-5 | pub.dev一次確認 2026-07-06 (latest 2.11.0, 2026-04-23公開)
+  # amplify_api: ^2.11.0       # AD-5 | Amplifyはロックステップ配信(amplify_core >=2.11.0 <2.12.0 制約で裏付け)
+  # amplify_auth_cognito: ^2.11.0 # AD-5 | 同上
+  device_info_plus: ^13.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  build_runner: ^2.15.0      # drift公式setupドキュメント(現行)が同値を提示 — pub getで最新パッチ解決
+  freezed: ^3.2.5            # AD-2 | pub.dev一次確認 (stable最新3.2.5。4.0.0はdev prereleaseのみ)
+  drift_dev: 2.31.0         # AD-3 | driftとロックステップ。2.31系で固定(sqlite3 3.x対応は2.32から)
