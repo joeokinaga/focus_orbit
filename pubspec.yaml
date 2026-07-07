@@ -20,7 +20,8 @@ dependencies:
   # amplify_flutter: ^2.11.0   # AD-5 | pub.dev一次確認 2026-07-06 (latest 2.11.0, 2026-04-23公開)
   # amplify_api: ^2.11.0       # AD-5 | Amplifyはロックステップ配信(amplify_core >=2.11.0 <2.12.0 制約で裏付け)
   # amplify_auth_cognito: ^2.11.0 # AD-5 | 同上
-  device_info_plus: ^13.0.0
+  # device_info_plus: ^13.0.0
+  device_info_plus: 11.0.0
 
 dev_dependencies:
   flutter_test:

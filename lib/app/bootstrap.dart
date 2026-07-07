@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// LANDMINE ⑨: Override型はmisc.dartが正。
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 import 'package:focus_orbit/app/di.dart';
 import 'package:focus_orbit/app/presentation/focus_orbit_app.dart';
@@ -19,7 +21,9 @@ import 'package:focus_orbit/features/stance/data/sensors_plus_gateway.dart';
 /// WAL で kill 安全、台帳のべき等性(§5/§7)が二重付与・消失を防ぐ。
 /// LANDMINE ④: economyStateProvider は keepAlive 前提のため、
 /// ここを autoDispose 構成に変えてはならない。
-Future<void> bootstrap() async {
+/// [extraOverrides] はデバッグ/E2E用エントリポイント(main_e2e.dart等)が
+/// ポリシー系providerを差し替えるための注入口。本番main.dartは常に空。
+Future<void> bootstrap({List<Override> extraOverrides = const []}) async {
   // §13 手順1: プラットフォームチャネル(drift_flutter のパス解決・
   // sensors_plus)使用前にバインディングを確立する。
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,11 +45,14 @@ Future<void> bootstrap() async {
   // 生きているため、ここで3つ全てを渡し損ねると起動時に即死する(仕様)。
   runApp(
     ProviderScope(
-      overrides: buildOverrides(
-        sensorGateway: sensorGateway,
-        preferences: preferences,
-        roomRepository: roomRepository,
-      ),
+      overrides: [
+        ...buildOverrides(
+          sensorGateway: sensorGateway,
+          preferences: preferences,
+          roomRepository: roomRepository,
+        ),
+        ...extraOverrides,
+      ],
       child: const FocusOrbitApp(),
     ),
   );

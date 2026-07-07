@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:focus_orbit/core/application/clock.dart';
@@ -43,5 +44,25 @@ class ShopController {
       Success(value: LedgerRejected()) => PurchaseOutcome.insufficientBalance,
       Failure() => PurchaseOutcome.storageError,
     };
+  }
+
+  /// 【デバッグ専用シード(P3-T2 E2E足場)】台帳を「通る」正規のearn取引で
+  /// コインを付与する。フラグ書換の裏口ではない — D14(残高=台帳射影)・
+  /// T6(べき等キー)・T7/D22(DB制約)の全防御層は生きたまま動く。
+  /// キーはタップ毎に一意('debug-seed:{epoch_us}')のため連打で累積付与できる。
+  /// releaseビルドでは到達不能(assert相当のガードで即throw)。
+  Future<void> debugSeedCoins(int coins) async {
+    if (!kDebugMode) {
+      throw StateError('debugSeedCoins はdebugビルド専用');
+    }
+    final now = _ref.read(clockProvider)();
+    await _ref.read(localPreferencesRepositoryProvider).apply(
+          CoinTransaction.sessionReward(
+            sessionId: SessionId('debug-seed:${now.microsecondsSinceEpoch}'),
+            coins: coins,
+            occurredAt: now,
+          ),
+        );
+    // await後にstateもref(watch系)も触らない(T9監査#3と同型)
   }
 }

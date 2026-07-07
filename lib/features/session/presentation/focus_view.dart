@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -51,6 +52,8 @@ class _FocusViewState extends ConsumerState<FocusView>
   bool _claiming = false;
 
   static const List<Duration> _presetDurations = [
+    // E2E/動作確認用の最短プリセット(P3-T2)。releaseビルドには現れない。
+    if (kDebugMode) Duration(minutes: 1),
     Duration(minutes: 15),
     Duration(minutes: 25),
     Duration(minutes: 45),

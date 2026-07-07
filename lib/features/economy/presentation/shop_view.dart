@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -78,10 +79,20 @@ class _ShopViewState extends ConsumerState<ShopView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
+              // 左端はIconButtonの内部余白(12dp)と合算してlg相当になるようsmへ。
               padding: const EdgeInsets.fromLTRB(
-                  FoSpace.lg, FoSpace.lg, FoSpace.lg, FoSpace.sm),
+                  FoSpace.sm, FoSpace.lg, FoSpace.lg, FoSpace.sm),
               child: Row(
                 children: [
+                  // P3-UX0: 明示的な戻る導線。スワイプ非依存・48dp標準タップ領域。
+                  // maybePop = ルート直起動等でスタックが無い場合も安全(no-op)。
+                  IconButton(
+                    tooltip: '戻る',
+                    icon: const Icon(Icons.arrow_back_ios_new,
+                        color: FoPalette.text),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                  const SizedBox(width: FoSpace.xs),
                   const Text(
                     'モチーフ',
                     style: TextStyle(
@@ -92,6 +103,16 @@ class _ShopViewState extends ConsumerState<ShopView> {
                     ),
                   ),
                   const Spacer(),
+                  // E2E足場: 台帳経由のシード(+500)。releaseには現れない。
+                  if (kDebugMode)
+                    IconButton(
+                      tooltip: '+500 (debug seed)',
+                      icon: const Icon(Icons.bolt_outlined,
+                          color: FoPalette.textDim, size: 20),
+                      onPressed: () => ref
+                          .read(shopControllerProvider)
+                          .debugSeedCoins(500),
+                    ),
                   _WalletBadge(economy: economyAsync),
                 ],
               ),
