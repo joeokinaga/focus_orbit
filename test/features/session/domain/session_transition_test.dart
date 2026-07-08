@@ -7,7 +7,7 @@ import 'package:focus_orbit/features/session/domain/session_phase.dart';
 import 'package:focus_orbit/features/session/domain/session_transition.dart';
 import 'package:focus_orbit/features/stance/domain/device_stance.dart';
 
-/// P1-T7: SessionTransition(T0-A3 v1.1)の遷移表テスト。
+/// P1-T7 / P4-V2: SessionTransition(T0-A3 v1.2 = D26 振動警告廃止 反映)の遷移表テスト。
 ///
 /// 【設計原則(写経防止)】
 /// 期待値は実装の switch を反映して生成せず、ARCHITECTURE §4 / T0-A3 の
@@ -161,9 +161,9 @@ void main() {
         lifted,
         'U'
       ),
-      // アクティブ相
+      // アクティブ相(D26: 微小振動は警告に遷移しない=無害no-op)
       ('running', const SessionPhase.running(), still, 'U'),
-      ('running', const SessionPhase.running(), vib, 'T'),
+      ('running', const SessionPhase.running(), vib, 'U'),
       ('running', const SessionPhase.running(), lifted, 'T'),
       ('warning', const SessionPhase.warning(), still, 'T'),
       ('warning', const SessionPhase.warning(), vib, 'U'),
@@ -203,16 +203,16 @@ void main() {
     });
   });
 
-  group('警告(running ⇄ warning)', () {
-    test('running × 微小振動 → warning + [StartGraceTimer]', () {
+  group('振動警告の廃止(D26)と warning 残置腕', () {
+    test('running × 微小振動 → Unchanged(警告に遷移せず・副作用なし)', () {
       final s = make(phase: const SessionPhase.running());
-      final r = mustTransition(
-          s, const SessionEvent.stanceChanged(DeviceStance.microVibration(rms: 0.3)));
-      expect(r.session.phase, const SessionPhase.warning());
-      expect(r.effects, [isA<StartGraceTimer>()]);
+      final r = SessionTransition.apply(s,
+          const SessionEvent.stanceChanged(DeviceStance.microVibration(rms: 0.3)));
+      expect(r, isA<Unchanged>(), reason: 'D26: 振動では集中を阻害しない');
+      expect((r as Unchanged).session, same(s));
     });
 
-    test('warning × 静止復帰 → running + [CancelGraceTimer](猶予解除)', () {
+    test('warning × 静止復帰 → running + [CancelGraceTimer](型残置腕・到達不能)', () {
       final s = make(phase: const SessionPhase.warning());
       final r = mustTransition(
           s, const SessionEvent.stanceChanged(DeviceStance.faceUpStill()));
@@ -341,10 +341,10 @@ void main() {
 
     test('遷移は id / motifId / syncMode / plannedDuration を保存する', () {
       var s = make(sync: SyncMode.multi);
+      // D26: 微小振動は Unchanged になったため正常旅程(全歩Transitioned)からは
+      // 除外。振動no-opの固定はスイープ表と「振動警告の廃止」groupが担う。
       final journey = <SessionEvent>[
         const SessionEvent.startRequested(),
-        const SessionEvent.stanceChanged(DeviceStance.microVibration(rms: 0.2)),
-        const SessionEvent.stanceChanged(DeviceStance.faceUpStill()),
         const SessionEvent.timerCompleted(rewardCoins: 30),
         const SessionEvent.rewardClaimed(),
       ];

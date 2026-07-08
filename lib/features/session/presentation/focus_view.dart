@@ -13,6 +13,7 @@ import 'package:focus_orbit/features/motif/domain/motif_catalog.dart';
 import 'package:focus_orbit/features/motif/domain/motif_skin.dart';
 import 'package:focus_orbit/features/motif/domain/motifs/water_motif.dart';
 import 'package:focus_orbit/features/motif/domain/render_params.dart';
+import 'package:focus_orbit/features/motif/presentation/stage/motif_stage.dart';
 import 'package:focus_orbit/features/presence/presentation/orbit_view.dart';
 import 'package:focus_orbit/features/session/application/session_controller.dart';
 import 'package:focus_orbit/features/session/application/view_mode_controller.dart';
@@ -30,7 +31,9 @@ import 'package:focus_orbit/features/session/domain/view_mode.dart';
 ///   WidgetsBinding.addObserver : initState / dispose(removeObserver)
 ///   _orbitCtrl(常時回転)       : initState / dispose
 ///   _pulseCtrl(warning点滅)    : initState / dispose
-///   _graceCtrl(猶予プログレス)  : initState / dispose
+///   _graceCtrl(猶予プログレス)  : initState / dispose(D26以降は実行時不使用・型残置)
+///   _stageController(P4-V2)   : フィールド初期化 / 破棄不要(内部リソースなし。
+///                                Ticker の生成/破棄は MotifStage 側の責務)
 class FocusView extends ConsumerStatefulWidget {
   const FocusView({super.key});
 
@@ -43,6 +46,11 @@ class _FocusViewState extends ConsumerState<FocusView>
   late final AnimationController _orbitCtrl;
   late final AnimationController _pulseCtrl;
   late final AnimationController _graceCtrl;
+
+  /// P4-V2: モチーフ物理ステージへの唯一の入力点。
+  /// 物理演算は MotifStage 内の Ticker→CustomPainter.repaint 経路で駆動され、
+  /// 本 State の setState / build とは独立(rebuild と物理が競合しない)。
+  final MotifStageController _stageController = MotifStageController();
 
   /// idle 画面のフォーム値(送信前の一時的なビュー状態。真実は start() 引数)。
   late Duration _pickedDuration;
@@ -71,6 +79,14 @@ class _FocusViewState extends ConsumerState<FocusView>
     _pulseCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 700));
     _graceCtrl = AnimationController(vsync: this, duration: Duration.zero);
+
+    // P4-V2: ステージ入力の初期ラッチ(ref.listen は初回発火しないため)。
+    // read のみ(initState での watch は不可)。以降の更新は build 内 listen。
+    final s0 = ref.read(sessionControllerProvider);
+    _stageController
+      ..setProgress(_progressOf(s0))
+      ..setIntensity(_intensityOf(s0))
+      ..setPouring(s0.phase is Running);
   }
 
   @override
@@ -106,6 +122,55 @@ class _FocusViewState extends ConsumerState<FocusView>
       _pulseCtrl.stop();
       _pulseCtrl.value = 0;
     }
+
+    // P4-V2: フェーズ変化→ステージ命令への「翻訳」(表示用。状態は変更しない)。
+    // 崩壊(shatter)の発火源はこの switch が唯一:
+    //   - Aborted(pickedUp)          = 端末の持ち上げ(唯一のセンサー由来終了条件)
+    //   - Aborted(systemInterrupted) = アプリからの明示的な離脱(D3: background遷移)
+    //   - Aborted(userCancelled)     = 明示的な中断操作
+    // D26 により微小振動では warning に遷移しないため、振動で崩壊は起きない。
+    switch (next) {
+      case Running():
+        // 新セッション(idle→running)は前回の残滓(蓄積・飛散粒子)を
+        // 持ち越さない。warning→running の復帰(型残置)ではリセットしない。
+        if (prev is Idle) _stageController.reset();
+        _stageController.setPouring(true);
+      case Aborted(:final reason):
+        _stageController
+          ..setPouring(false)
+          ..shatter(impulse: _shatterImpulseFor(reason));
+      case Completed():
+        // 完走は「崩壊」ではない。蓄積を静かに止める(祝祭表現は P4-V4 で検討)。
+        _stageController.setPouring(false);
+      case Idle():
+        _stageController.setPouring(false);
+      case Warning():
+        // D26 以降は実行時到達不能(sealed 網羅のための腕)。蓄積は停止する。
+        _stageController.setPouring(false);
+    }
+  }
+
+  /// 崩壊の強さ。将来(P4-V6)は加速度センサの実測振幅を写像する。
+  double _shatterImpulseFor(AbortReason reason) => switch (reason) {
+        AbortReason.pickedUp => 1.6, // 持ち上げ=最も強い物理的崩壊
+        AbortReason.systemInterrupted => 1.2, // アプリ離脱
+        AbortReason.userCancelled => 1.0,
+        AbortReason.graceTimeout => 1.0, // D26 以降は到達しない(残置)
+      };
+
+  /// セッション進捗 0..1(蓄積=fill の目標値)。
+  double _progressOf(FocusSession s) => s.plannedDuration == Duration.zero
+      ? 0.0
+      : (s.elapsed.inSeconds / s.plannedDuration.inSeconds)
+          .clamp(0.0, 1.0)
+          .toDouble(); // LANDMINE ⑯: num.clamp は num を返す
+
+  /// 集中度 0..1(P4-V2 暫定: 連続 running 時間で 8 分かけて深まる)。
+  /// P4-V6 でセンサ実測(静止の質)由来へ差し替える予定の注入点。
+  double _intensityOf(FocusSession s) {
+    if (s.phase is! Running) return 0.0;
+    final minutes = s.elapsed.inSeconds / 60.0;
+    return (minutes / 8.0).clamp(0.0, 1.0).toDouble(); // LANDMINE ⑯
   }
 
   // ---- イベント発火(全てコントローラへ委譲) --------------------------------
@@ -186,6 +251,15 @@ class _FocusViewState extends ConsumerState<FocusView>
       _onPhaseChanged,
     );
 
+    // P4-V2: 毎tick(1s)の進捗・集中度をステージへラッチする。
+    // sim への入力の書き込みのみで Widget ツリーには触れない(rebuild 非依存)。
+    // 物理の時間発展と描画は MotifStage の Ticker→repaint 経路が担う。
+    ref.listen<FocusSession>(sessionControllerProvider, (_, next) {
+      _stageController
+        ..setProgress(_progressOf(next))
+        ..setIntensity(_intensityOf(next));
+    });
+
     final session = ref.watch(sessionControllerProvider);
     final viewMode = ref.watch(viewModeControllerProvider);
     final phase = session.phase;
@@ -223,49 +297,66 @@ class _FocusViewState extends ConsumerState<FocusView>
             ? const OrbitView(key: ValueKey('orbit'))
             : SafeArea(
                 key: const ValueKey('focus'),
-                child: switch (phase) {
-                  Idle() => _IdleBody(
-                      motif: motif,
-                      pickedDuration: _pickedDuration,
-                      presetDurations: _presetDurations,
-                      pickedSyncMode: _pickedSyncMode,
-                      onDurationPicked: (d) =>
-                          setState(() => _pickedDuration = d),
-                      onSyncModePicked: (m) =>
-                          setState(() => _pickedSyncMode = m),
-                      onStart: _onStartPressed,
-                    ),
-                  Running() => _ActiveBody(
-                      session: session,
-                      renderParams: rp,
-                      isWarning: false,
-                      orbit: _orbitCtrl,
-                      pulse: _pulseCtrl,
-                      grace: _graceCtrl,
-                      onCancel: _onCancelPressed,
-                      onToggleView: _onToggleViewPressed,
-                    ),
-                  Warning() => _ActiveBody(
-                      session: session,
-                      renderParams: rp,
-                      isWarning: true,
-                      orbit: _orbitCtrl,
-                      pulse: _pulseCtrl,
-                      grace: _graceCtrl,
-                      onCancel: _onCancelPressed,
-                      onToggleView: _onToggleViewPressed,
-                    ),
-                  Completed(:final rewardCoins) => _CompletedBody(
-                      rewardCoins: rewardCoins,
-                      renderParams: rp,
-                      claiming: _claiming,
-                      onClaim: _onClaimPressed,
-                    ),
-                  Aborted(:final reason) => _AbortedBody(
-                      reason: reason,
-                      onAcknowledge: _onAcknowledgePressed,
-                    ),
-                },
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // P4-V2: モチーフ物理ステージ(全面バックドロップ)。
+                    // Running/Warning で蓄積・オービットが進む。Aborted /
+                    // Completed でも同一 Element を維持するため、崩壊の飛散は
+                    // 了承画面の背後で、満ちた蓄積は完走画面の背後で
+                    // 見届けられる(idle に戻った時点でアンマウント)。
+                    // MotifStage 内部の RepaintBoundary が毎フレーム再描画を
+                    // この枝に隔離する(本 build は再実行されない)。
+                    if (phase is! Idle)
+                      MotifStage(
+                        controller: _stageController,
+                        motif: motif,
+                      ),
+                    switch (phase) {
+                      Idle() => _IdleBody(
+                          motif: motif,
+                          pickedDuration: _pickedDuration,
+                          presetDurations: _presetDurations,
+                          pickedSyncMode: _pickedSyncMode,
+                          onDurationPicked: (d) =>
+                              setState(() => _pickedDuration = d),
+                          onSyncModePicked: (m) =>
+                              setState(() => _pickedSyncMode = m),
+                          onStart: _onStartPressed,
+                        ),
+                      Running() => _ActiveBody(
+                          session: session,
+                          renderParams: rp,
+                          isWarning: false,
+                          orbit: _orbitCtrl,
+                          pulse: _pulseCtrl,
+                          grace: _graceCtrl,
+                          onCancel: _onCancelPressed,
+                          onToggleView: _onToggleViewPressed,
+                        ),
+                      Warning() => _ActiveBody(
+                          session: session,
+                          renderParams: rp,
+                          isWarning: true,
+                          orbit: _orbitCtrl,
+                          pulse: _pulseCtrl,
+                          grace: _graceCtrl,
+                          onCancel: _onCancelPressed,
+                          onToggleView: _onToggleViewPressed,
+                        ),
+                      Completed(:final rewardCoins) => _CompletedBody(
+                          rewardCoins: rewardCoins,
+                          renderParams: rp,
+                          claiming: _claiming,
+                          onClaim: _onClaimPressed,
+                        ),
+                      Aborted(:final reason) => _AbortedBody(
+                          reason: reason,
+                          onAcknowledge: _onAcknowledgePressed,
+                        ),
+                    },
+                  ],
+                ),
               ),
       ),
     );

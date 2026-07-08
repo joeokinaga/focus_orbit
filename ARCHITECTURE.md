@@ -94,15 +94,15 @@ test/
 
 Phase 4 で追加する data 実装: `presence/data/appsync_room_repository.dart`（§6 契約）。
 
-## 4. セッション状態機械（T0-A3 v1.1 = session_transition.dart が実装）
+## 4. セッション状態機械（T0-A3 **v1.2** = session_transition.dart が実装。v1.2 = P4-V2/D26: 振動警告の廃止）
 
 | 現在 | イベント | 次 | 副作用（SessionEffect） |
 |---|---|---|---|
 | idle | startRequested | running | StartSessionTimer (+multi: JoinPresence) |
-| running | stance→microVibration | warning | StartGraceTimer |
-| warning | stance→faceUpStill | running | CancelGraceTimer |
+| running | stance→microVibration | **不変(Unchanged)** | —（**D26**: 振動警告の廃止。D1 を上書き） |
+| warning | stance→faceUpStill | running | CancelGraceTimer（**型残置腕・実行時到達不能**） |
 | running/warning | stance→lifted | aborted(pickedUp) | StopAllTimers (+multi: LeavePresence) |
-| warning | graceTimeout | aborted(graceTimeout) | 同上 |
+| warning | graceTimeout | aborted(graceTimeout) | 同上（**型残置腕・実行時到達不能**） |
 | running | graceTimeout(stale) | running | —（レース無害化） |
 | running/warning | userCancelled / systemInterrupted | aborted(...) | 同上 |
 | running/warning | timerCompleted(coins) | completed(coins) | StopAllTimers (+multi: LeavePresence) |
@@ -115,8 +115,9 @@ Phase 4 で追加する data 実装: `presence/data/appsync_room_repository.dart
 stateDiagram-v2
     [*] --> Idle
     Idle --> Running: startRequested
-    Running --> Warning: microVibration
-    Warning --> Running: faceUpStill
+    %% D26(P4-V2): Running --> Warning(microVibration) は削除。
+    %% Warning ノードは型残置(到達不能)。完全撤去は P4-V2b。
+    Warning --> Running: faceUpStill(到達不能)
     Running --> Completed: timerCompleted
     Warning --> Completed: timerCompleted
     Running --> Aborted: lifted / cancel / interrupt
@@ -127,6 +128,7 @@ stateDiagram-v2
 
 ViewModeはSessionPhaseと直交（D2）。切替可否は `ViewModePolicy.canToggle`（running/warningのみtrue）。
 本表はテスト側にも「手書きの二重転記」として存在する（session_transition_test.dart の35行スイープ）。表を変更する場合は実装・本書・テスト表の3点を同時更新すること。
+P4-V2 変更履歴: v1.1→v1.2 で (running × microVibration) を Transitioned(warning)→**Unchanged** に変更（3点同時更新済み・2026-07-08）。セッション終了条件は「端末の持ち上げ(lifted)」と「明示的離脱(userCancelled / systemInterrupted=D3)」のみに単純化。
 
 ## 5. 報酬の整合性（コインは二重付与も消失もしない）
 
@@ -208,9 +210,9 @@ watch契約: (1) listen直後に必ずスナップショット1件 (2) 再接続
 | AD-5 | Amplify Gen2 + AppSync Subscription + DynamoDB TTL + Cognito guest | subscribeがStreamを返す・再接続バックオフ内蔵。欠落メッセージは再接続時スナップショット再取得で補償 | AppSync Events API（Flutter対応未確認のため） |
 | AD-6 | rxdart不採用 | 必要演算3種は純Dartで足り依存最小化 | rxdart |
 
-## 9. 決定ログ D1–D22
+## 9. 決定ログ D1–D26
 
-D1 微振動は即failでなくwarning+猶予 / D2 ViewModeはPhaseと直交・アクティブ中のみ切替 / D3 background・着信=systemInterrupted / D4 接続断でもセッション継続・presenceのみデグレード / D5 domain層import白リスト / D6 MotifCatalogは静的定義 / D7 報酬額はイベントペイロード注入 / D8 非アクティブ中のstanceはno-op / D9(v1.1) domain間エッジはsession→stanceとeconomy→motifのみ / D10 水=価格0初期解放 / D11 カタログ検証はShopController / D12 tickは遷移でなくcopyWith / D13 UserSettingsは最小構成（閾値永続化はdrift user_settingsで実装済み） / D14 残高・解放は台帳射影 / D15 SessionIdはローカル一意で十分 / D16 報酬は効果先行コミット / D17 猶予10秒（注入可） / D18 1分=1コイン（暫定） / D19 部屋=モチーフ単位 / D20 時刻はclockProvider注入 / **D21**(P2) DB制約違反は例外messageの文字列一致でなく `SqliteException` の拡張コード（2067等）で型判定する / **D22**(P2) DB制約はドメイン・台帳検証に続く第三層防御であり、テストは制約自体を `customStatement` で直接叩いて固定する。
+D1 微振動は即failでなくwarning+猶予(**歴史的記録 — D26 で上書き済み。現行仕様は D26**) / D2 ViewModeはPhaseと直交・アクティブ中のみ切替 / D3 background・着信=systemInterrupted / D4 接続断でもセッション継続・presenceのみデグレード / D5 domain層import白リスト / D6 MotifCatalogは静的定義 / D7 報酬額はイベントペイロード注入 / D8 非アクティブ中のstanceはno-op / D9(v1.1) domain間エッジはsession→stanceとeconomy→motifのみ / D10 水=価格0初期解放 / D11 カタログ検証はShopController / D12 tickは遷移でなくcopyWith / D13 UserSettingsは最小構成（閾値永続化はdrift user_settingsで実装済み） / D14 残高・解放は台帳射影 / D15 SessionIdはローカル一意で十分 / D16 報酬は効果先行コミット / D17 猶予10秒（注入可） / D18 1分=1コイン（暫定） / D19 部屋=モチーフ単位 / D20 時刻はclockProvider注入 / **D21**(P2) DB制約違反は例外messageの文字列一致でなく `SqliteException` の拡張コード（2067等）で型判定する / **D22**(P2) DB制約はドメイン・台帳検証に続く第三層防御であり、テストは制約自体を `customStatement` で直接叩いて固定する。 / **D23**(P4-V0) ステージ物理はモチーフ共通の StageSimulation 1 実装に集約し、モチーフ差は StagePhysicsTuning 定数とレンダラ具象で表現する（共通ルール3条=蓄積・オービット・崩壊は sim が保証） / **D24**(P4-V0) レンダラ選択は MotifId キーの StageRendererRegistry（登録簿+水フォールバック=D11同型。消費側の具象switch禁止=T5） / **D25**(P4-V0) StageSimulation は SessionPhase を知らない。フェーズ→ステージ命令の翻訳は presentation 層（focus_view の _onPhaseChanged）が担う / **D26**(P4-V2) 微小振動は warning に遷移しない（振動警告の廃止・D1 を上書き）。終了条件は lifted と明示的離脱のみ。Warning フェーズは型残置（到達不能）、完全撤去は P4-V2b。UI 層では Aborted 遷移時のみ MotifStage.shatter() が発火する。
 
 ## 10. 検証状態（2026-07-07）
 

@@ -87,7 +87,7 @@ final class Rejected extends TransitionResult {
   final SessionEvent event;
 }
 
-/// ---- 純関数遷移: T0-A3 v1.1が唯一の正 ----
+/// ---- 純関数遷移: T0-A3 v1.2(D26: 振動警告の廃止を反映)が唯一の正 ----
 class SessionTransition {
   const SessionTransition._();
 
@@ -101,9 +101,11 @@ class SessionTransition {
               if (s.syncMode == SyncMode.multi) const JoinPresence(),
             ]),
         (Running(), StanceChanged(stance: FaceUpStill())) => Unchanged(s),
-        (Running(), StanceChanged(stance: MicroVibration())) => Transitioned(
-            s.copyWith(phase: const SessionPhase.warning()),
-            [const StartGraceTimer()]),
+        // D26(P4-V2): 微小振動は警告に遷移しない(振動警告の廃止・D1を上書き)。
+        // 離脱条件は「持ち上げ(lifted)」と「明示的離脱(cancel/interrupt)」のみ。
+        // Warning フェーズと猶予系の腕は型網羅のため残置(実行時到達不能)。
+        // 型レベルの完全撤去は P4-V2b(SessionPhase/UI/テスト表の同時スイープ)。
+        (Running(), StanceChanged(stance: MicroVibration())) => Unchanged(s),
         (Warning(), StanceChanged(stance: FaceUpStill())) => Transitioned(
             s.copyWith(phase: const SessionPhase.running()),
             [const CancelGraceTimer()]),
