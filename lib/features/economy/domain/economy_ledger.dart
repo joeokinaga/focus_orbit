@@ -34,7 +34,7 @@ final class InsufficientBalance extends EconomyFailure {
   final int available;
 }
 
-/// core/Result<T,E>でなく専用3値: べき等ヒット(AlreadyApplied)を成功と
+/// core/`Result<T,E>`でなく専用3値: べき等ヒット(AlreadyApplied)を成功と
 /// 区別して観測可能にするため(監査・デバッグ用途)。
 sealed class LedgerResult {
   const LedgerResult();
