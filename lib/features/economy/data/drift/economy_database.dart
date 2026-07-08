@@ -1,3 +1,12 @@
+// ignore_for_file: recursive_getters
+// 【recursive_getters lint抑制・ファイル単位】drift_dev はテーブルのゲッターを
+// 「ソース文字列」として静的解析し check() 式を抽出する(build_runner時のみ・
+// 実行時には呼ばれない)。公式ドキュメント通りの自己参照構文
+// (例: `integer().check(amount.isBiggerThanValue(0))()`)を本ファイル全体で
+// 使うため、行単位の ignore ではなく ignore_for_file で一括抑制する
+// (複数行に折り返した宣言では診断位置が ignore コメントの直後行からずれ、
+// 行単位 ignore が効かないケースがあったため — 2026-07-08 実測で確認)。
+
 import 'package:drift/drift.dart';
 
 part 'economy_database.g.dart';
@@ -34,6 +43,10 @@ class CoinTransactionRows extends Table {
   TextColumn get type => text()();
 
   /// CHECK(amount > 0): 0円・負額トランザクションはDB層でも構築不可能。
+  /// 【recursive_getters lint抑制】drift_dev はこのゲッターの「ソース文字列」を
+  /// 静的解析して check() 式を取り出す(build_runner時・実行時には呼ばれない)。
+  /// ローカル変数に置き換えるとジェネレータが式を読み取れなくなるため、
+  /// 公式ドキュメント通りの自己参照構文を維持し、lintのみ抑制する。
   IntColumn get amount => integer().check(amount.isBiggerThanValue(0))();
 
   /// spend_unlock のときのみ非NULL(earnはNULL)。整合はテーブルCHECKで強制。
@@ -58,6 +71,8 @@ class WalletSnapshotRows extends Table {
   String get tableName => 'wallet_snapshot';
 
   /// 単一行規約: CHECK(id = 1) で2行目の存在をDB層で禁止。
+  /// 【recursive_getters lint抑制】上記 amount と同じ理由(drift静的解析用の
+  /// 自己参照構文・build_runner時のみ意味を持つ)。
   IntColumn get id => integer().check(id.equals(1))();
 
   IntColumn get balance => integer().check(balance.isBiggerOrEqualValue(0))();
@@ -79,6 +94,7 @@ class UserSettingsRows extends Table {
   TextColumn get selectedMotifId => text()();
 
   /// Duration はミリ秒intで永続化(§7: 時刻・期間はUTCエポックms/ms単位)。
+  /// 【recursive_getters lint抑制】上記と同じ理由。
   IntColumn get defaultSessionDurationMs =>
       integer().check(defaultSessionDurationMs.isBiggerThanValue(0))();
 

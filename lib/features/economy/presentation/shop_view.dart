@@ -226,7 +226,7 @@ class _MotifList extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(
           FoSpace.lg, FoSpace.sm, FoSpace.lg, FoSpace.xl),
       itemCount: MotifCatalog.all.length,
-      separatorBuilder: (_, __) => const SizedBox(height: FoSpace.md),
+      separatorBuilder: (_, _) => const SizedBox(height: FoSpace.md),
       itemBuilder: (context, index) {
         final motif = MotifCatalog.all[index];
         return _MotifCard(
